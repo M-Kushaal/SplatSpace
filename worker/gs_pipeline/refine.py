@@ -176,9 +176,34 @@ def rebuild_scene_extension(refined: dict, points: np.ndarray | None) -> None:
             st.pop("center", None)  # no placed photo of this spot: no reliable position
 
 
+MERGE_EPOCH_JUMP_M = 1.0
+
+
+def effective_epochs(manifest: dict) -> list[int]:
+    """Per-frame tracking epochs, with needless splits merged back. The app starts a new epoch on every pose event
+    it can't rule out; an early version also did so for ARCore's normal 15-70 cm map corrections, splitting one
+    capture into 26 epochs. Consecutive photos (in time) whose AR positions differ by less than
+    MERGE_EPOCH_JUMP_M across an epoch change are in the same map; a real map restart (16 m) stays split."""
+    frames = manifest.get("frames", [])
+    raw = [int(f.get("tracking_epoch", 0)) for f in frames]
+    if len(set(raw)) <= 1:
+        return raw
+    order = sorted(range(len(frames)), key=lambda i: float(frames[i].get("timestamp", i)))
+    pos = [np.asarray(f["transform_matrix"], float)[:3, 3] if "transform_matrix" in f else None for f in frames]
+    group = {raw[order[0]]: 0}
+    for a, b in zip(order[:-1], order[1:]):
+        if raw[b] in group:
+            continue
+        same_map = (raw[b] != raw[a] and pos[a] is not None and pos[b] is not None
+                    and np.linalg.norm(pos[b] - pos[a]) < MERGE_EPOCH_JUMP_M)
+        group[raw[b]] = group[raw[a]] if same_map else len(set(group.values()))
+    return [group[e] for e in raw]
+
+
 def main_epoch_mask(names: list[str], manifest: dict) -> np.ndarray:
     """Photos of the largest tracking epoch (the app starts a new epoch after a pose jump it couldn't rule out)."""
-    epochs = {Path(f["file_path"]).name: int(f.get("tracking_epoch", 0)) for f in manifest.get("frames", [])}
+    eff = effective_epochs(manifest)
+    epochs = {Path(f["file_path"]).name: eff[i] for i, f in enumerate(manifest.get("frames", []))}
     e = np.array([epochs.get(nm, 0) for nm in names])
     vals, counts = np.unique(e, return_counts=True)
     return e == vals[np.argmax(counts)]
@@ -279,7 +304,8 @@ def refine(manifest_path, out_dir, num_threads: int = 2, max_image_size: int = 1
 
         t1 = time.time()
         if scene:  # no single target: pair cameras that look at the same part of the room
-            epochs = [int(f.get("tracking_epoch", 0)) for f in manifest["frames"]]
+            epochs = effective_epochs(manifest)
+            report["epochs_effective"] = len(set(epochs))
             pairs = select_pairs_scene(names, [f.c2w_gl for f in frames], epochs=epochs)
             # + photos that look alike, whatever AR says (AR can jump after a shake)
             tinies = np.stack([tiny_image(f.image_path) for f in frames])

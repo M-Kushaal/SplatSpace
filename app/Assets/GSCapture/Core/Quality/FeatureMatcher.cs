@@ -73,9 +73,15 @@ namespace GSCapture.Core.Quality
             return m.Length < MinPutative ? 0 : RansacFundamental(fa, fb, m, seed);
         }
 
-        public static int RansacFundamental(FrameFeatures fa, FrameFeatures fb, (int a, int b)[] m, int seed = 1)
+        public static int RansacFundamental(FrameFeatures fa, FrameFeatures fb, (int a, int b)[] m, int seed = 1) =>
+            RansacFundamental(fa, fb, m, seed, out _);
+
+        /// <summary>Same, also returning which matches are inliers of the best fundamental matrix.</summary>
+        public static int RansacFundamental(FrameFeatures fa, FrameFeatures fb, (int a, int b)[] m, int seed,
+                                            out bool[] inliers)
         {
             int n = m.Length;
+            inliers = new bool[n];
             if (n < 8) return 0;
             // normalise: centre the image, scale so the long side spans [-1, 1]
             float s = 2f / Math.Max(fa.Width, fa.Height);
@@ -92,6 +98,7 @@ namespace GSCapture.Core.Quality
             var rng = new Random(seed);
             var sample = new int[8];
             var F = new double[9];
+            var bestF = new double[9];
             int best = 0, iterations = MaxIterations;
             for (int it = 0; it < iterations; it++)
             {
@@ -114,12 +121,16 @@ namespace GSCapture.Core.Quality
                 if (inl > best)
                 {
                     best = inl;
+                    Array.Copy(F, bestF, 9);
                     // adaptive stop: enough iterations to have drawn one all-inlier sample with 99% confidence
                     double w = (double)inl / n, w8 = Math.Pow(w, 8);
                     if (w8 > 1e-9)
                         iterations = Math.Min(MaxIterations, (int)Math.Ceiling(Math.Log(0.01) / Math.Log(1 - Math.Min(w8, 0.999999))));
                 }
             }
+            if (best > 0)
+                for (int k = 0; k < n; k++)
+                    inliers[k] = Sampson(bestF, p1[2 * k], p1[2 * k + 1], p2[2 * k], p2[2 * k + 1]) < thr2;
             return best;
         }
 

@@ -90,8 +90,9 @@ namespace GSCapture
         bool relocBusy;
         float lastRelocTry, lastRelocTime = -1f;
         RelocResult lastReloc;
-        readonly Dictionary<string, (int anchor, Vector3 pos, Vector3 fwd)> frameAnchors =
-            new Dictionary<string, (int, Vector3, Vector3)>();
+        readonly Dictionary<string, (int anchor, Vector3 pos, Vector3 fwd, Quaternion rot)> frameAnchors =
+            new Dictionary<string, (int, Vector3, Vector3, Quaternion)>();
+        int relocShownFrame = -1;
         ARPlane floorPlane;
         float surfaceDistance = 10f, lastMapTime;
 
@@ -474,7 +475,8 @@ namespace GSCapture
         {
             floorPlane = FindFloor();
             float floorY = floorPlane != null ? floorPlane.center.y : arCamera.transform.position.y - 1.4f;
-            gateConfig = GateConfig.Scene;
+            gateConfig = GateConfig.ForScene(CaptureTypeSheet.FastPhotos);
+            Count(CaptureTypeSheet.FastPhotos ? "PhotoModeFast" : "PhotoModeSharp");
             mode = Mode.Capturing;
             hud.SetStep(2);
             hud.SetHint(null);
@@ -788,6 +790,8 @@ namespace GSCapture
                 lastUnsteadyTime = now;
             if (frameCounter % 5 == 0) surfaceDistance = CenterSurfaceDistance();
 
+            scene.UpdateManualHold(lens, fwd, now);
+
             // Pose integrity first: if the AR pose can't be trusted, nothing is shot until it is confirmed again.
             float anchorJump = scene.SyncAnchors();
             bool trackingOk = ARSession.state == ARSessionState.SessionTracking &&
@@ -892,6 +896,7 @@ namespace GSCapture
             public CapturedFrame Frame;
             public SceneMatch Match;
             public Vector3 Lens, Fwd;
+            public Quaternion Rot;
 
             public void Dispose()
             {
@@ -950,6 +955,7 @@ namespace GSCapture
                 Buffer = buffer,
                 Lens = arCamera.transform.position,
                 Fwd = arCamera.transform.forward,
+                Rot = arCamera.transform.rotation,
                 Frame = new CapturedFrame
                 {
                     CameraToWorldGL = pose,
@@ -992,9 +998,10 @@ namespace GSCapture
                 if (a >= 0)
                 {
                     var sa = scene.Planner.Stations[a];
-                    frameAnchors[rel] = (a, sa.ToLocal(shot.Lens), sa.DirToLocal(shot.Fwd));
+                    frameAnchors[rel] = (a, sa.ToLocal(shot.Lens), sa.DirToLocal(shot.Fwd),
+                                         Quaternion.Inverse(sa.AnchorRotation) * shot.Rot);
                 }
-                else frameAnchors[rel] = (-1, shot.Lens, shot.Fwd);
+                else frameAnchors[rel] = (-1, shot.Lens, shot.Fwd, shot.Rot);
             }
             frames.Add(cf);
             lastShotTime = Time.time;
@@ -1075,6 +1082,16 @@ namespace GSCapture
                 return;
             }
             if (pendingWrites > 2 || frames.Count >= SceneCaptureFlow.MaxFrames) return;
+            if (poseGuard != null && poseGuard.Paused)
+            {
+                toast.Show("Wait - the position is being checked", Theme.Warning);
+                return;
+            }
+            if (!scene.ManualReady)
+            {
+                toast.Show($"Hold this direction and tilt for {SceneCaptureFlow.ManualHoldSeconds:0} s first", Theme.Info);
+                return;
+            }
             FlushBestShot();
             if (!cameraManager.TryAcquireLatestCpuImage(out XRCpuImage image)) return;
             using (image)
@@ -1087,6 +1104,7 @@ namespace GSCapture
                 shot.Frame.Manual = true;
                 Save(shot, () => scene.CommitManual(lens, fwd));
             }
+            scene.ResetManualHold(Time.time);
             Count("ManualShot");
         }
 
@@ -1106,6 +1124,7 @@ namespace GSCapture
         {
             string coach = PoseGuard.Coaching(poseGuard.Reason, poseGuard.NeedsVisualCheck);
             bool offerContinue = false;
+            if (poseGuard.NeedsVisualCheck && relocShownFrame < 0 && frames.Count > 0) ShowReference(frames.Count - 1);
             if (poseGuard.ReadyToResume)
             {
                 if (!poseGuard.NeedsVisualCheck || features.Count == 0)
@@ -1123,9 +1142,9 @@ namespace GSCapture
                     return;
                 }
                 if (fresh && lastReloc.Matched)
-                    coach = "The camera recognises this area but AR disagrees - keep pointing at scanned areas";
+                    coach = "Recognised, but the position doesn't add up yet - keep pointing at areas you already scanned";
                 offerContinue = poseGuard.PausedSeconds > 8f;
-                if (offerContinue) coach = "Can't confirm your position - point at a scanned area, or tap Continue here (your photos are safe)";
+                if (offerContinue) coach = "Can't confirm - tap Continue here. Your photos are safe; processing joins everything by matching photos";
             }
             sceneHud.ShowContinue(offerContinue);
             hud.SetCoach(coach, Theme.Warning);
@@ -1135,6 +1154,8 @@ namespace GSCapture
         {
             poseGuard.Resume();
             sceneHud.ShowContinue(false);
+            sceneHud.ShowReference(null);
+            relocShownFrame = -1;
             Haptics.Tick();
             if (message != null) toast.Show(message, Theme.Success, 2.5f);
         }
@@ -1154,6 +1175,8 @@ namespace GSCapture
             Haptics.Tick();
             toast.Show("Continuing as a new spot. All your photos are kept - processing joins both parts by matching " +
                        "the photos themselves, so nothing is lost.", Theme.Info, 7f);
+            sceneHud.ShowReference(null);
+            relocShownFrame = -1;
         }
 
         /// <summary>Grab the live view as a small grey thumbnail (same look as the saved photos' thumbnails) and match it
@@ -1197,21 +1220,43 @@ namespace GSCapture
                 features.TryGetValue(fr.FilePath, out var ft);
                 if (!frameAnchors.TryGetValue(fr.FilePath, out var fa)) ft = null; // no pose record: can't be compared
                 Vector3 p = fa.pos, d = fa.fwd;
+                Quaternion r = fa.rot;
                 if (fa.anchor >= 0 && fa.anchor < scene.Planner.Stations.Count)
                 {
                     var st = scene.Planner.Stations[fa.anchor];
                     p = st.ToWorld(fa.pos);
                     d = st.AnchorRotation * fa.fwd;
+                    r = st.AnchorRotation * fa.rot;
                 }
-                cands.Add(new RelocCandidate { Features = ft, Position = p, Forward = d });
+                var pose = new CamPose();
+                if (ft != null)
+                {
+                    float sx = (float)ft.Width / fr.Width;
+                    pose = new CamPose
+                    {
+                        C2wGL = PoseConverter.ApplyImageRoll(PoseConverter.ToOpenGLCameraToWorld(p, r), imageRollDegrees),
+                        Fx = fr.Fx * sx, Fy = fr.Fy * sx, Cx = fr.Cx * sx, Cy = fr.Cy * sx, Height = ft.Height, Valid = true,
+                    };
+                }
+                cands.Add(new RelocCandidate { Features = ft, Position = p, Forward = d, Pose = pose });
             }
+            var livePose = new CamPose();
+            if (cameraManager.TryGetIntrinsics(out XRCameraIntrinsics intr))
+                livePose = new CamPose
+                {
+                    C2wGL = PoseConverter.ApplyImageRoll(
+                        PoseConverter.ToOpenGLCameraToWorld(arCamera.transform.position, arCamera.transform.rotation), imageRollDegrees),
+                    Fx = intr.focalLength.x * tw / intr.resolution.x, Fy = intr.focalLength.y * th / intr.resolution.y,
+                    Cx = intr.principalPoint.x * tw / intr.resolution.x, Cy = intr.principalPoint.y * th / intr.resolution.y,
+                    Height = th, Valid = true,
+                };
             var pick = RelocCheck.PickCandidates(cands, lens, fwd);
             relocBusy = true;
             var task = Task.Run(() =>
             {
                 var live = OrbLite.Extract(gray, tw, th);
                 foreach (int i in RelocCheck.PickByLooks(live, cands)) if (!pick.Contains(i)) pick.Add(i);
-                return RelocCheck.Run(live, lens, fwd, cands, pick);
+                return RelocCheck.Run(live, lens, fwd, cands, pick, livePose);
             });
             StartCoroutine(CollectReloc(task));
         }
@@ -1228,6 +1273,16 @@ namespace GSCapture
             }
             lastReloc = task.Result;
             lastRelocTime = Time.time;
+            int show = lastReloc.Candidate >= 0 ? lastReloc.Candidate : lastReloc.BestPartial;
+            if (show >= 0) ShowReference(show);
+        }
+
+        /// <summary>Show an earlier photo to aim at while the position is re-checked.</summary>
+        void ShowReference(int frameIndex)
+        {
+            if (frameIndex < 0 || frameIndex >= frames.Count || frameIndex == relocShownFrame) return;
+            relocShownFrame = frameIndex;
+            sceneHud.ShowReference(Thumbnails.Get(Path.Combine(captureDir, frames[frameIndex].FilePath), 320));
         }
 
         // ------------------------------------------------------------------ room check (scene captures)

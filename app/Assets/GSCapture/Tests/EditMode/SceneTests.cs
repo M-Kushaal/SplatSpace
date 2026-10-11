@@ -169,9 +169,14 @@ namespace GSCapture.Tests
             Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, cfg), Is.EqualTo(GateReason.Ok));
             input.AngularSpeed = 1f;
             Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, cfg), Is.EqualTo(GateReason.MovingTooFast));
-            input.AngularSpeed = 0.25f; // a slow, steady turn: too fast for objects, fine for rooms (blur decides)
+            input.AngularSpeed = 0.25f; // a steady turn: too fast for objects and for Sharp rooms, fine for Fast rooms
             input.SteadySeconds = 0.15f;
             Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, cfg), Is.EqualTo(GateReason.MovingTooFast));
+            Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, GateConfig.ForScene(fast: true)), Is.EqualTo(GateReason.Ok));
+            Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, GateConfig.Scene), Is.EqualTo(GateReason.MovingTooFast),
+                "Sharp is the default");
+            input.AngularSpeed = 0.08f; // turning slowly (~5 deg/s) is fine in Sharp mode
+            input.SteadySeconds = 0.25f;
             Assert.That(CaptureGate.EvaluateSceneGeometry(input, GateReason.Ok, GateConfig.Scene), Is.EqualTo(GateReason.Ok));
             Assert.That(CaptureGate.Coaching(GateReason.TooCloseToBody), Does.Contain("arm's length"));
         }

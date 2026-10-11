@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from gs_pipeline.cameras import qvec_to_rotmat
-from gs_pipeline.refine import gravity_scale_similarity, main_epoch_mask, ransac_similarity, refine, robust_similarity, select_pairs, umeyama
+from gs_pipeline.refine import effective_epochs, gravity_scale_similarity, main_epoch_mask, ransac_similarity, refine, robust_similarity, select_pairs, umeyama
 from conftest import orbit_manifest
 
 
@@ -114,3 +114,16 @@ def test_gravity_and_scale_survive_broken_ar_positions():
     assert abs(s - 2.5) < 0.05
     up = R @ (Q @ np.array([0.0, 1.0, 0.0]))
     assert up[1] > 0.999, "gravity recovered"
+
+
+def test_small_epoch_splits_merge_but_a_real_jump_stays_split():
+    def frame(i, epoch, x):
+        m = np.eye(4)
+        m[0, 3] = x
+        return {"file_path": f"images/{i}.jpg", "timestamp": float(i), "tracking_epoch": epoch, "transform_matrix": m.tolist()}
+
+    # epochs 0 -> 1 -> 2 with 20-30 cm corrections, then a 16 m restart into epoch 3, then a small split again
+    xs = [0.0, 0.1, 0.3, 0.4, 0.7, 0.8, 16.8, 16.9, 17.1]
+    eps = [0, 0, 1, 1, 2, 2, 3, 4, 4]
+    eff = effective_epochs({"frames": [frame(i, e, x) for i, (e, x) in enumerate(zip(eps, xs))]})
+    assert eff == [0, 0, 0, 0, 0, 0, 1, 1, 1]

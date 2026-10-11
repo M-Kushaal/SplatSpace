@@ -64,20 +64,21 @@ namespace GSCapture.Core
             MinBrightness = 45f,
         };
 
-        // Rooms: COLMAP re-estimates every pose from the photos, so AR pose lag no longer matters and only
-        // real blur does (BlurMeter + BestFrameBuffer keep the sharpest frame per sector). On the first room
-        // the 0.08 rad/s limit blocked 2.5 min of a ~10 min capture while only 31 frames were actually blurry.
-        // The motion limits are now just safety caps.
-        public static GateConfig Scene
+        // Rooms, two photo modes (chosen before a capture):
+        //  - Sharp (default): turn slowly, never freeze. Rooms 2-3 were shot at a median 0.16 rad/s with the Fast
+        //    limits, ~4x the first room's 0.04 rad/s: 4-8 px of motion blur per photo indoors, which the relative
+        //    blur check can't see when every photo is equally soft. 0.1 rad/s keeps it to ~2-4 px.
+        //  - Fast: the limits are only safety caps; BestFrameBuffer keeps the sharpest frame per sector.
+        // COLMAP re-estimates every pose from the photos, so AR pose lag doesn't matter in either mode.
+        public static GateConfig Scene => ForScene(fast: false);
+
+        public static GateConfig ForScene(bool fast)
         {
-            get
-            {
-                var c = Default;
-                c.MaxAngularSpeed = 0.35f;
-                c.MaxLinearSpeed = 0.25f;
-                c.MinSteadySeconds = 0.1f;
-                return c;
-            }
+            var c = Default;
+            c.MaxAngularSpeed = fast ? 0.35f : 0.1f;
+            c.MaxLinearSpeed = fast ? 0.25f : 0.15f;
+            c.MinSteadySeconds = fast ? 0.1f : 0.2f;
+            return c;
         }
     }
 

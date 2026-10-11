@@ -34,7 +34,7 @@ namespace GSCapture.Core
             BandHalfWidthDeg = 12f,
             SectorToleranceDeg = 7.5f, // the sharpest frame inside the sector is kept (BestFrameBuffer)
             ArmOffset = 0.4f,
-            MinBodyDistance = 0.25f,
+            MinBodyDistance = 0.15f,   // people hold the phone ~30 cm out; 25 cm rejected 11,850 frames on room 3
             MaxBodyDistance = 1.2f,     // generous: AR heading drift moves the lens circle a little
             MinStationGap = 0.8f,
             StationDoneFill = 0.85f,
@@ -174,6 +174,24 @@ namespace GSCapture.Core
             Vector3 f = Flat(fwd);
             if (f.sqrMagnitude < 1e-6f) return lens;
             return lens - f.normalized * Config.ArmOffset;
+        }
+
+        /// <summary>The band whose pitch is closest (also between bands, where <see cref="Evaluate"/> says -1).</summary>
+        public int NearestBand(float pitchDeg)
+        {
+            float[] pitches = { Config.LevelPitchDeg, Config.DownPitchDeg, Config.UpPitchDeg };
+            int best = 0;
+            for (int b = 1; b < 3; b++)
+                if (Mathf.Abs(pitchDeg - pitches[b]) < Mathf.Abs(pitchDeg - pitches[best])) best = b;
+            return best;
+        }
+
+        /// <summary>The slice (band x sector) a view points at, using the nearest band: same key = same direction
+        /// and tilt. Sectors are relative to the current spot (absolute azimuth outside a spot).</summary>
+        public int ViewKey(Vector3 lens, Vector3 fwd)
+        {
+            var m = Evaluate(lens, fwd);
+            return NearestBand(m.PitchDeg) * Config.Sectors + m.Sector;
         }
 
         /// <summary>Distance from the would-be station to the nearest existing one (infinity if none).</summary>

@@ -246,3 +246,22 @@ def test_refine_carries_spot_and_sharpness_per_photo():
     carry_frame_fields(refined, orig)
     assert refined["frames"][0] == {"file_path": "images/000001.jpg", "target_id": 214, "blur_score": 9.5}
     assert refined["frames"][1] == {"file_path": "images/000002.jpg"}
+
+
+def test_big_far_gaussians_are_not_floaters_or_needles():
+    from gs_pipeline.postprocess import floater_mask
+
+    rng = np.random.default_rng(1)
+    near = rng.uniform(-1, 1, (4000, 3)) * [1, 1, 0.01]          # dense near wall, ~3 cm spacing
+    far = np.c_[rng.uniform(-3, 3, 60), np.full(60, 2.5), rng.uniform(4, 6, 60)]  # far ceiling, ~60 cm spacing
+    g = _gaussians(np.vstack([near, far]))
+    g["scales_log"][:4000] = np.log(0.01)
+    g["scales_log"][4000:] = np.log([0.5, 0.4, 0.02])            # big flat-ish discs covering their gaps
+    g["opacities_logit"][4000:] = np.log(0.25 / 0.75)            # semi-transparent
+    assert not floater_mask(g)[4000:].all(), "the old rule removes them"
+    assert floater_mask(g, size_aware=True)[4000:].all(), "size-aware: big Gaussians covering their gaps stay"
+
+    g2 = _gaussians(np.array([[0, 1.4, -0.5], [0, 2.5, -6.0]]))
+    g2["scales_log"] = np.log(np.array([[0.4, 0.01, 0.01], [0.4, 0.01, 0.01]], np.float32))
+    keep = needle_mask(g2, cameras=np.array([[0, 1.4, 0.0]]))
+    assert keep.tolist() == [False, True], "a stick next to the camera is fur; far away it is a slanted surface"

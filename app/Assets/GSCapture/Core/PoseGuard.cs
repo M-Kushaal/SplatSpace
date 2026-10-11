@@ -26,11 +26,17 @@ namespace GSCapture.Core
         public float WindowSeconds;
         public float AnchorJump;          // m a spot anchor may move in one frame
         public float StableSeconds;       // tracking + calm for this long before resuming
+        public float BridgeSeconds;       // tracking losses shorter than this can be bridged by the gyro
+        public float BridgeSlackDeg;      // AR may turn this much more than the gyro measured during the loss
 
         public static PoseGuardConfig Default => new PoseGuardConfig
         {
-            ShakeRadPerSec = 3f, CalmRadPerSec = 1f, MaxSpeed = 1.5f, TeleportFrames = 2, MaxFrameJump = 0.15f,
-            MismatchDeg = 8f, WindowSeconds = 0.2f, AnchorJump = 0.1f, StableSeconds = 1f,
+            // Thresholds from the third room: ARCore routinely corrects its map by 15-70 cm and ~9 deg in a frame;
+            // pausing on those (25 times in 18 min) made capture tedious and split it into 26 epochs for nothing.
+            // A real map restart is metres and tens of degrees.
+            ShakeRadPerSec = 3f, CalmRadPerSec = 1f, MaxSpeed = 2.5f, TeleportFrames = 3, MaxFrameJump = 0.5f,
+            MismatchDeg = 15f, WindowSeconds = 0.2f, AnchorJump = 0.3f, StableSeconds = 1f, BridgeSeconds = 2f,
+            BridgeSlackDeg = 10f,
         };
     }
 
@@ -56,9 +62,10 @@ namespace GSCapture.Core
 
         readonly Queue<(float t, Quaternion rot, float gyroAngle)> window = new Queue<(float, Quaternion, float)>();
         float gyroIntegral;
-        bool hasLast, lost;
-        Vector3 lastPos;
-        float lastT;
+        bool hasLast, hasTime, lost, lostHasPose;
+        Vector3 lastPos, lostPos;
+        Quaternion lastRot = Quaternion.identity, lostRot;
+        float lastT, lostAt, lostGyro;
         int fastFrames;
 
         public PoseGuard(PoseGuardConfig? config = null)
@@ -75,7 +82,8 @@ namespace GSCapture.Core
         /// </summary>
         public PoseEvent Update(float t, Vector3 pos, Quaternion rot, float gyro, bool tracking, float anchorJump = 0f)
         {
-            float dt = hasLast ? Mathf.Max(t - lastT, 1e-4f) : 0f;
+            float dt = hasTime ? Mathf.Max(t - lastT, 1e-4f) : 0f; // frame time, also while tracking is lost
+            hasTime = true;
             PoseEvent ev = PoseEvent.None;
 
             if (!tracking)
@@ -83,8 +91,14 @@ namespace GSCapture.Core
                 if (!lost)
                 {
                     lost = true;
+                    lostAt = t;
+                    lostGyro = 0f;
+                    lostHasPose = hasLast;
+                    lostPos = lastPos;
+                    lostRot = lastRot;
                     ev = Fire(t, PoseEvent.TrackingLost, 0f, jump: false);
                 }
+                else lostGyro += gyro * dt; // the gyro keeps measuring while ARCore is lost
                 ResetMotion();
                 StableSeconds = 0f;
                 if (Paused) PausedSeconds += dt;
@@ -94,7 +108,13 @@ namespace GSCapture.Core
             if (lost)
             {
                 lost = false;
-                ev = Fire(t, PoseEvent.Relocalized, 0f, jump: true);
+                // Gyro bridge: a short loss after which AR is where the phone could physically be (turned no more than
+                // the gyro measured, moved no faster than walking) is not a jump - resume without a visual re-check.
+                float dur = t - lostAt;
+                bool plausible = lostHasPose && dur < Config.BridgeSeconds &&
+                                 Quaternion.Angle(lostRot, rot) <= lostGyro * Mathf.Rad2Deg + Config.BridgeSlackDeg &&
+                                 (pos - lostPos).magnitude <= Config.MaxSpeed * dur + 0.3f;
+                ev = Fire(t, PoseEvent.Relocalized, (pos - lostPos).magnitude, jump: !plausible);
                 ResetMotion();
             }
 
@@ -131,6 +151,7 @@ namespace GSCapture.Core
             }
             hasLast = true;
             lastPos = pos;
+            lastRot = rot;
             lastT = t;
             return ev;
         }
@@ -180,7 +201,7 @@ namespace GSCapture.Core
         {
             if (e == PoseEvent.Shake) return "Whoa - hold the phone steady for a second";
             if (e == PoseEvent.TrackingLost) return "Tracking lost - point at something you already scanned";
-            return needsVisual ? "Position jumped - point at an area you already captured and hold still"
+            return needsVisual ? "Point at something you already captured (like the photo above) - any angle is fine"
                                : "Hold still for a second…";
         }
     }

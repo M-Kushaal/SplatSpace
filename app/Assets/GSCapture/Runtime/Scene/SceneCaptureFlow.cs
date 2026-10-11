@@ -36,6 +36,20 @@ namespace GSCapture
         SceneMatch lastMatch;
         bool lastWasStation;
         Vector2? suggestedSpot;
+        readonly SliceHold manualHold = new SliceHold();
+
+        /// <summary>Seconds the phone must stay on the same slice (direction + tilt) before Manual capture unlocks:
+        /// it is for slices the automatic capture can't get, not a way to skip it.</summary>
+        public const float ManualHoldSeconds = 3f;
+
+        public float ManualHeld => manualHold.Held;
+        public bool ManualReady => ManualHeld >= ManualHoldSeconds;
+
+        /// <summary>Track how long the phone has pointed at the same slice (call every frame).</summary>
+        public void UpdateManualHold(Vector3 lens, Vector3 fwd, float now) => manualHold.Update(Planner.ViewKey(lens, fwd), now);
+
+        /// <summary>After a manual photo the next one needs another full hold.</summary>
+        public void ResetManualHold(float now) => manualHold.Restart(now);
 
         public SceneCaptureFlow(SceneHud hud, ARAnchorManager anchors, Material lineMaterial)
         {
@@ -113,7 +127,8 @@ namespace GSCapture
             if (Phase == ScenePhase.Spin && Planner.Current != null)
             {
                 var m = Planner.Evaluate(lens, fwd);
-                if (m.Band >= 0 && !m.Filled) return Planner.MarkStationShot(m, lens, fwd);
+                if (m.Band < 0) m.Band = Planner.NearestBand(m.PitchDeg); // between bands: the closest one
+                if (!Planner.Current.Filled[m.Band, m.Sector]) return Planner.MarkStationShot(m, lens, fwd);
             }
             return Planner.MarkCloseup(lens, fwd);
         }
@@ -217,6 +232,7 @@ namespace GSCapture
                          Phase == ScenePhase.Walking ? $"{Planner.Stations.Count} spots · room {Mathf.RoundToInt(Floor.Fraction * 100)}%"
                                                      : $"{Planner.WallsPathMeters:0.0} m";
             hud.SetCompass(m.AzimuthDeg, station, tBand, tSector, m.Band, title, sub);
+            hud.SetManual(ManualReady, ManualHoldSeconds - ManualHeld);
             int resume = Phase == ScenePhase.Spin ? -1 : Planner.NearestStation(lens, fwd);
             bool resumable = resume >= 0 && Planner.Stations[resume].Fill < 1f;
             hud.SetButtons(Phase, Planner.CanStartStationAt(lens, fwd) || resumable, Planner.CurrentDone, resumable ? resume : -1,

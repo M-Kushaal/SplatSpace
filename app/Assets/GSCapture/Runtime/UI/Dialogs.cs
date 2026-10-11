@@ -223,11 +223,49 @@ namespace GSCapture.UI
             Card("Object", "Object capture", "One thing on a table or the floor.\nWalk around it while the app shows you where to stand.",
                 "about 5 min · 60–100 photos", new Vector2(-400, -10), () => ObjectChosen?.Invoke(), ObjectIcon);
             Card("Scene", "Scene capture", "A whole room or space.\nTurn with the phone at arm's length at 5–8 spots (level, down, up), then walk the walls.",
-                "about 10 min · 400–600 photos", new Vector2(400, -10), () => SceneChosen?.Invoke(), SceneIcon);
+                "about 10–15 min · 400–600 photos", new Vector2(400, -10), () => SceneChosen?.Invoke(), SceneIcon);
+
+            // room photo mode: Sharp (default) or Fast
+            var modeLabel = UIKit.Label(Root, "ModeLabel", "Room photos:", Theme.CaptionSize, Theme.TextDim, Theme.SemiBold,
+                TextAnchor.MiddleRight);
+            modeLabel.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(-520, -345), new Vector2(300, 70));
+            sharpButton = UIKit.Button(Root, "Sharp", "", UIKit.ButtonStyle.Secondary, () => SetFast(false), Theme.CaptionSize - 2);
+            sharpButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0.5f), new Vector2(-130, -345), new Vector2(460, 76));
+            fastButton = UIKit.Button(Root, "Fast", "", UIKit.ButtonStyle.Secondary, () => SetFast(true), Theme.CaptionSize - 2);
+            fastButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0.5f), new Vector2(350, -345), new Vector2(460, 76));
+            SetFast(FastPhotos);
 
             var cancel = UIKit.Button(Root, "Cancel", "Cancel", UIKit.ButtonStyle.Ghost, () => Cancelled?.Invoke());
-            cancel.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0.5f), new Vector2(0, -400), new Vector2(300, 100));
+            cancel.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0.5f), new Vector2(0, -450), new Vector2(300, 90));
             Root.gameObject.SetActive(false);
+        }
+
+        const string FastKey = "gs.photo.fast";
+        Button sharpButton, fastButton;
+
+        /// <summary>Room photo mode, remembered between captures: false = Sharp (slower, better photos), true = Fast.</summary>
+        public static bool FastPhotos
+        {
+            get => PlayerPrefs.GetInt(FastKey, 0) == 1;
+            set
+            {
+                PlayerPrefs.SetInt(FastKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+
+        void SetFast(bool fast)
+        {
+            FastPhotos = fast;
+            Style(sharpButton, !fast, fast ? "Sharp · slower, best photos" : "✓ Sharp · slower, best photos");
+            Style(fastButton, fast, fast ? "✓ Fast · quicker, a bit softer" : "Fast · quicker, a bit softer");
+        }
+
+        static void Style(Button b, bool on, string text)
+        {
+            b.SetLabel(text);
+            b.GetComponent<Image>().color = on ? Theme.Accent : Theme.GlassLight;
+            b.GetComponentInChildren<Text>().color = on ? Theme.OnAccent : Theme.Text;
         }
 
         void Card(string name, string heading, string body, string meta, Vector2 offset, Action onClick, Action<Transform> icon)

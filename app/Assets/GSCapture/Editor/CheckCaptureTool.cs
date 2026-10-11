@@ -56,6 +56,7 @@ namespace GSCapture.EditorTools
             var starts = new List<int>();
             foreach (Match m in FramePath.Matches(json, start)) starts.Add(m.Index);
             var photos = new List<CheckPhoto>();
+            var poses = new List<CamPose>();
             var sw = Stopwatch.StartNew();
             long extractMs = 0;
             var tex = new Texture2D(2, 2);
@@ -87,6 +88,13 @@ namespace GSCapture.EditorTools
                 var gray = OrbLite.GrayThumb(rgba, w, h, out int tw, out int th);
                 var feats = OrbLite.Extract(gray, tw, th);
                 extractMs += t.ElapsedMilliseconds;
+                float sx = (float)tw / w;
+                poses.Add(new CamPose
+                {
+                    C2wGL = c2w, Fx = Field(block, "fl_x", Field(json, "fl_x", 0)) * sx,
+                    Fy = Field(block, "fl_y", Field(json, "fl_y", 0)) * sx, Cx = Field(block, "cx", Field(json, "cx", 0)) * sx,
+                    Cy = Field(block, "cy", Field(json, "cy", 0)) * sx, Height = th, Valid = true,
+                });
                 photos.Add(new CheckPhoto
                 {
                     Features = feats, CameraToWorldGL = c2w, Sharpness = (float)sharp,
@@ -125,6 +133,10 @@ namespace GSCapture.EditorTools
                 File.AppendAllText(Path.Combine(Path.GetTempPath(), "gs_check_debug.txt"), dbg + Environment.NewLine);
             }
 
+            string split = Environment.GetEnvironmentVariable("GS_CHECK_EPI_SPLIT"); // index of the first photo after a known jump
+            if (!string.IsNullOrEmpty(split)) File.AppendAllText(Path.Combine(Path.GetTempPath(), "gs_check_debug.txt"),
+                EpipolarReport(photos, poses, int.Parse(split)) + Environment.NewLine);
+
             var check = new RoomCheck();
             var rep = check.Run(photos);
             var sb = new StringBuilder();
@@ -162,6 +174,60 @@ namespace GSCapture.EditorTools
             foreach (var kv in spots) sb.Append($"{(kv.Key < 0 ? "walls" : "spot " + (kv.Key + 1))}: {kv.Value.n} photos, {kv.Value.linked} linked, {kv.Value.main} in main group; ");
             sb.AppendLine();
             return sb.ToString();
+        }
+
+        /// <summary>1 when the full re-check (epipolar + depth + rotation) accepts the pair, else the agreement scaled
+        /// below the acceptance line so the percentiles stay informative.</summary>
+        static float Verdict(FrameFeatures a, CamPose pa, FrameFeatures b, CamPose pb, List<(int a, int b)> m)
+        {
+            float agr = RelocCheck.EpipolarAgreement(a, pa, b, pb, m);
+            float rot = RelocCheck.RotationError(a, pa, b, pb, m);
+            bool ok = agr >= RelocCheck.MinAgreement && (rot < 0 || rot <= RelocCheck.MaxRotationErrorDeg);
+            return ok ? 1f : Math.Min(agr, RelocCheck.MinAgreement - 0.01f);
+        }
+
+        /// <summary>AR-vs-image agreement for overlapping photo pairs on the same side of a known map jump vs across it.</summary>
+        static string EpipolarReport(List<CheckPhoto> photos, List<CamPose> poses, int split)
+        {
+            var same = new List<float>();
+            var across = new List<float>();
+            int n = photos.Count;
+            for (int i = 0; i + 1 < n; i++)
+            {
+                if ((i < split) != (i + 1 < split)) continue;
+                var m = RelocCheck.VerifiedMatches(photos[i].Features, photos[i + 1].Features, i, out int inl);
+                if (inl >= RelocCheck.MinInliers)
+                    same.Add(Verdict(photos[i].Features, poses[i], photos[i + 1].Features, poses[i + 1], m));
+            }
+            for (int i = 0; i < split; i += 2)
+            {
+                var sims = new List<(float s, int j)>();
+                for (int j = split; j < n; j++)
+                {
+                    float d = 0;
+                    var a = photos[i].Features.Tiny;
+                    var b = photos[j].Features.Tiny;
+                    for (int k = 0; k < a.Length; k++) d += a[k] * b[k];
+                    sims.Add((d, j));
+                }
+                sims.Sort((x, y) => y.s.CompareTo(x.s));
+                for (int k = 0; k < Math.Min(4, sims.Count); k++)
+                {
+                    int j = sims[k].j;
+                    var m = RelocCheck.VerifiedMatches(photos[i].Features, photos[j].Features, i + j, out int inl);
+                    if (inl >= RelocCheck.MinInliers)
+                        across.Add(Verdict(photos[i].Features, poses[i], photos[j].Features, poses[j], m));
+                }
+            }
+            string P(List<float> v)
+            {
+                if (v.Count == 0) return "none";
+                v.Sort();
+                int ok = v.FindAll(x => x >= RelocCheck.MinAgreement).Count;
+                return $"n={v.Count} p10={v[v.Count / 10]:F2} p50={v[v.Count / 2]:F2} p90={v[v.Count * 9 / 10]:F2} " +
+                       $"accepted {ok}/{v.Count}";
+            }
+            return $"epipolar agreement | same map: {P(same)} | across the jump: {P(across)}";
         }
 
         static double Avg(List<CheckPhoto> l, Func<CheckPhoto, int> f)

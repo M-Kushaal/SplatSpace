@@ -84,10 +84,14 @@ def transform_gaussians(g: dict, R: np.ndarray, t: np.ndarray) -> dict:
     return {**g, "means": g["means"] @ R.T + t, "quats_wxyz": q, "shN": rotate_shN(g["shN"], R)}
 
 
-def floater_mask(g: dict, k: int = 8, isolation: float = 4.0, faint: float = 0.35) -> np.ndarray:
+def floater_mask(g: dict, k: int = 8, isolation: float = 4.0, faint: float = 0.35, size_aware: bool = False) -> np.ndarray:
     """True for Gaussians to keep. Floaters / background haze are isolated (mean distance to their k
     nearest neighbours > `isolation` x the median spacing) AND faint (opacity < `faint`). On the first
-    steel-bottle capture they had 4% opacity at ~16 mm spacing vs. 20-30% at 1-3 mm on real surfaces."""
+    steel-bottle capture they had 4% opacity at ~16 mm spacing vs. 20-30% at 1-3 mm on real surfaces.
+
+    size_aware (rooms): a Gaussian at least as big as the gap to its neighbours is not isolated - it covers
+    that gap. Far, slanted surfaces (the sloped ceiling ends of the third room) are made of few, big,
+    semi-transparent Gaussians; without this they were all removed as "floaters" and left see-through holes."""
     from scipy.spatial import cKDTree
 
     means = g["means"]
@@ -96,15 +100,25 @@ def floater_mask(g: dict, k: int = 8, isolation: float = 4.0, faint: float = 0.3
     d, _ = cKDTree(means).query(means, k=k + 1)
     spacing = d[:, 1:].mean(axis=1)
     opacity = 1 / (1 + np.exp(-g["opacities_logit"]))
-    return ~((spacing > isolation * np.median(spacing)) & (opacity < faint))
+    isolated = spacing > isolation * np.median(spacing)
+    if size_aware:
+        isolated &= spacing > 2.0 * np.exp(g["scales_log"]).max(axis=1)
+    return ~(isolated & (opacity < faint))
 
 
-def needle_mask(g: dict, max_len: float = 0.25, max_ratio: float = 15.0) -> np.ndarray:
+def needle_mask(g: dict, max_len: float = 0.25, max_ratio: float = 15.0, cameras: np.ndarray | None = None) -> np.ndarray:
     """True for Gaussians to keep. Needles ("fur" on the first room's ceiling) are long (largest axis
     > max_len m) AND thin in both other directions (largest / middle axis > max_ratio). Real surfaces are
     flat discs (two long axes), so big discs on blank walls are kept."""
     s = np.sort(np.exp(g["scales_log"]), axis=1)
-    return ~((s[:, 2] > max_len) & (s[:, 2] > max_ratio * np.maximum(s[:, 1], 1e-9)))
+    limit = np.full(len(s), max_len)
+    if cameras is not None and len(cameras):
+        # far from every camera, surfaces are seen at a slant and legitimately need longer Gaussians
+        from scipy.spatial import cKDTree
+
+        dist, _ = cKDTree(cameras).query(g["means"])
+        limit = max_len * np.maximum(1.0, dist / 1.5)
+    return ~((s[:, 2] > limit) & (s[:, 2] > max_ratio * np.maximum(s[:, 1], 1e-9)))
 
 
 def clean(splat_ply, out_ply, **kw) -> dict:
@@ -169,19 +183,19 @@ def postprocess_scene(splat_ply, manifest_path, manifest: dict, c2ws: list, out_
 
     centers = np.array([c[:3, 3] for c in c2ws])
     pts = load_points(manifest_path, manifest)
-    lo, hi = crop_box(pts, centers)
+    lo, hi = crop_box(pts, centers, lo=0.5, hi=99.5, margin=0.75)  # generous: thin far corners are part of the room
     floor = floor_height(manifest, pts, centers)
     g = read_gaussians_ply(splat_ply)
     n_in = len(g["means"])
     keep = np.all((g["means"] >= lo) & (g["means"] <= hi), axis=1)
     keep &= 1 / (1 + np.exp(-g["opacities_logit"])) >= min_opacity
-    nk = needle_mask(g)
+    nk = needle_mask(g, cameras=centers)
     needles = int((keep & ~nk).sum())
     keep &= nk
     g = {k: v[keep] for k, v in g.items()}
     floaters = 0
     if remove_floaters:
-        fk = floater_mask(g)
+        fk = floater_mask(g, size_aware=True)
         floaters = int((~fk).sum())
         g = {k: v[fk] for k, v in g.items()}
 

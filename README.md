@@ -44,7 +44,8 @@ installing it. Say yes.
 
 ### 2. Capture a room
 
-1. Open **SplatSpace**, tap **New capture**, then **Scene capture**.
+1. Open **SplatSpace**, tap **New capture**, then **Scene capture**. Below the choices you can pick the photo mode:
+   **Sharp** (default: turn slowly for the best photos) or **Fast** (quicker, slightly softer photos).
 2. **Point at the floor** until it says *Floor found*, then tap **Start scene**.
 3. **Turn on the spot.** Hold the phone out at arm's length and turn your whole body slowly, three times:
    phone **level**, tilted **down**, then tilted **up** at the ceiling. Each slice of the circle on screen
@@ -95,10 +96,11 @@ Drag to look around, scroll to move closer. From there you can also clean up str
 - 🔲 **Don't skip the corners or the walls pass.** That's where gaps in the model usually come from.
 - 🪟 **Near windows, give it a second.** The camera has to adjust to the bright light, and the app waits for it automatically.
 - 📸 **More is better.** Around 400–600 photos is ideal for a bedroom.
-- 🤚 **If the phone gets bumped,** the app pauses and asks you to point at something you already captured.
+- 🤚 **If the phone gets bumped,** the app pauses and shows an earlier photo to point at (any angle works).
   If it can't recover, tap **Continue here**. **Your photos are never lost.** Everything is joined back
   together when the model is built.
-- 🖐️ **App being too picky?** Press the round **Take photo** button to take a photo right away.
+- 🖐️ **App being too picky?** Hold the phone on the same spot for 3 seconds and tap **Manual capture** (inside the
+  circle) to take that photo yourself.
 - 🔒 **Privacy:** your captures stay on your phone and in your own private Kaggle dataset. Avoid capturing
   documents, screens or people you don't want in the model.
 
@@ -114,7 +116,8 @@ If it's still not supported, the phone isn't compatible.
 <details>
 <summary><b>It keeps saying "Hold still" or "Too blurry"</b></summary>
 
-Add more light. You can also press **Take photo** to force a shot.
+Add more light, or switch to **Sharp** photo mode and turn more slowly. You can also hold still for 3 seconds and
+tap **Manual capture**.
 </details>
 
 <details>

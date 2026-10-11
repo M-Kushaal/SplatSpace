@@ -20,9 +20,13 @@ namespace GSCapture.UI
         readonly RectTransform compassSpin;
         readonly Image[,] segments;
         readonly Text centerTitle, centerSub;
+        Button manualButton;
+        Text manualLabel;
         readonly Button spotButton, closeupButton;
         readonly GameObject wallsIntro;
         readonly Button continueButton;
+        readonly GameObject referencePanel;
+        readonly RawImage referenceImage;
         bool wallsIntroSeen;
         readonly RawImage map;
         readonly Texture2D mapTex;
@@ -61,9 +65,14 @@ namespace GSCapture.UI
             var pointer = UIKit.Dot(bg.transform, "Pointer", Theme.Text, 22);
             pointer.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -2), new Vector2(22, 22));
             centerTitle = UIKit.Label(bg.transform, "Title", "", Theme.HeadingSize, Theme.Text, Theme.Bold, TextAnchor.MiddleCenter);
-            centerTitle.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0, 18), new Vector2(200, 56));
+            centerTitle.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0, 38), new Vector2(200, 56));
             centerSub = UIKit.Label(bg.transform, "Sub", "", Theme.CaptionSize - 4, Theme.TextDim, Theme.SemiBold, TextAnchor.MiddleCenter);
-            centerSub.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0, -28), new Vector2(200, 40));
+            centerSub.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0, -4), new Vector2(200, 40));
+            // manual capture: small, inside the compass under the percentage; unlocks after holding a slice 5 s
+            manualButton = UIKit.Button(bg.transform, "Manual", "Manual capture", UIKit.ButtonStyle.Secondary,
+                () => ManualShot?.Invoke(), Theme.CaptionSize - 8);
+            manualButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0.5f), new Vector2(0, -54), new Vector2(150, 42));
+            manualLabel = manualButton.GetComponentInChildren<Text>();
 
             // ---- spot buttons (bottom left, above the shared hint panel)
             spotButton = UIKit.Button(Root, "Spot", "Next spot", UIKit.ButtonStyle.Secondary, () =>
@@ -93,16 +102,37 @@ namespace GSCapture.UI
             continueButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 440), new Vector2(420, 100));
             continueButton.gameObject.SetActive(false);
 
-            // manual shutter (right side): always takes the photo now, for when the automatic checks are too picky
-            var shutter = UIKit.Dot(Root, "Shutter", Color.white, 150);
-            shutter.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(-120, -60), new Vector2(150, 150));
-            var inner = UIKit.Dot(shutter.transform, "Inner", Theme.Accent, 118);
-            inner.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(118, 118));
-            inner.raycastTarget = false;
-            shutter.gameObject.AddComponent<Button>().onClick.AddListener(() => ManualShot?.Invoke());
-            var lbl = UIKit.Label(Root, "ShutterLabel", "Take photo", Theme.CaptionSize - 4, Theme.TextDim, Theme.SemiBold,
-                TextAnchor.MiddleCenter);
-            lbl.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(-120, -160), new Vector2(220, 36));
+            // while the position is re-checked: an earlier photo to aim at (top centre)
+            var refBg = UIKit.Panel(Root, "Reference", Theme.Glass);
+            refBg.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -200), new Vector2(380, 260));
+            var refMask = UIKit.Panel(refBg.transform, "Mask", Color.white, 0.5f);
+            refMask.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(352, 198));
+            refMask.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            referenceImage = UIKit.Rect(refMask.transform, "Image").Stretch().gameObject.AddComponent<RawImage>();
+            referenceImage.raycastTarget = false;
+            var refLabel = UIKit.Label(refBg.transform, "Label", "Point at this - any angle works", Theme.CaptionSize - 6,
+                Theme.Text, Theme.SemiBold, TextAnchor.MiddleCenter);
+            refLabel.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 8), new Vector2(352, 36));
+            referencePanel = refBg.gameObject;
+            referencePanel.SetActive(false);
+        }
+
+        /// <summary>Manual capture is enabled only after the phone held the same slice long enough; until then it
+        /// counts down.</summary>
+        public void SetManual(bool ready, float secondsLeft)
+        {
+            manualButton.interactable = ready;
+            string text = ready ? "Manual capture" : $"Manual in {Mathf.CeilToInt(Mathf.Max(secondsLeft, 0f))}s";
+            if (manualLabel.text != text) manualLabel.text = text;
+            manualButton.GetComponent<Image>().color = ready ? Theme.Accent : Theme.GlassLight;
+            manualLabel.color = ready ? Theme.OnAccent : Theme.TextDim;
+        }
+
+        /// <summary>Show an earlier photo to aim at (null hides the panel).</summary>
+        public void ShowReference(Texture tex)
+        {
+            referenceImage.texture = tex;
+            referencePanel.SetActive(tex != null);
         }
 
         /// <summary>Offered when a position jump can't be confirmed: carry on as a new spot.</summary>

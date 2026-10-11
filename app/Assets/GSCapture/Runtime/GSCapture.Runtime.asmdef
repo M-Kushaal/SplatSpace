@@ -1,0 +1,12 @@
+{
+  "name": "GSCapture.Runtime",
+  "rootNamespace": "GSCapture",
+  "references": [
+    "GSCapture.Core",
+    "Unity.XR.ARFoundation",
+    "Unity.XR.ARSubsystems",
+    "Unity.XR.CoreUtils",
+    "UnityEngine.UI"
+  ],
+  "autoReferenced": true
+}

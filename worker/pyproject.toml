@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gs-pipeline"
+version = "0.1.0"
+description = "Capture-bundle validation + Gaussian splat training (gs_pipeline) and the GPU job runner (gs_worker)"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pillow", "jsonschema"]
+
+[project.optional-dependencies]
+viz = ["matplotlib"]
+train = ["torch", "gsplat==1.5.3", "scipy"]
+worker = ["httpx"]
+refine = ["pycolmap", "opencv-python-headless"]
+
+[tool.setuptools.packages.find]
+include = ["gs_pipeline*", "gs_worker*"]
+
+[tool.setuptools.package-data]
+gs_pipeline = ["*.json"]

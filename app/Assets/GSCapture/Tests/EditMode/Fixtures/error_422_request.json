@@ -1,0 +1,1 @@
+{"detail":[{"type":"value_error","loc":["body","email"],"msg":"value is not a valid email address: The part after the @-sign is a special-use or reserved name that cannot be used with email.","input":"a@gscapture.local","ctx":{"reason":"The part after the @-sign is a special-use or reserved name that cannot be used with email."}}]}

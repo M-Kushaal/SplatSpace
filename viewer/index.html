@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b0f14">
+  <title>GS Viewer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232dd4bf'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%230b0f14'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/",
+      "@sparkjsdev/spark": "./vendor/spark/spark.module.js"
+    }
+  }
+  </script>
+</head>
+<body class="bg-dark">
+  <canvas id="stage" aria-label="3D view"></canvas>
+
+  <!-- top bar -->
+  <header class="topbar">
+    <div class="brand glass">
+      <span class="logo" aria-hidden="true"></span>
+      <div class="titles">
+        <div id="title" class="title">GS Viewer</div>
+        <div id="subtitle" class="subtitle">Gaussian splat viewer</div>
+      </div>
+    </div>
+    <nav class="actions">
+      <button class="icon-btn glass" id="btn-open" title="Open file (O)" aria-label="Open file">
+        <svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+      </button>
+      <button class="icon-btn glass" id="btn-info" title="Details (I)" aria-label="Details">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
+      </button>
+      <button class="icon-btn glass" id="btn-settings" title="View settings" aria-label="View settings">
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
+      <button class="icon-btn glass" id="btn-help" title="Controls (?)" aria-label="Controls">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.5v.5"/></svg>
+      </button>
+      <button class="icon-btn glass" id="btn-fullscreen" title="Fullscreen" aria-label="Fullscreen">
+        <svg viewBox="0 0 24 24"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <!-- empty state / errors -->
+  <section id="empty" class="center-card glass" hidden>
+    <div class="drop-icon" aria-hidden="true">
+      <svg viewBox="0 0 48 48"><path d="M24 6 40 15v18L24 42 8 33V15z"/><path d="M8 15l16 9 16-9M24 24v18"/></svg>
+    </div>
+    <h1 id="empty-title">Open a Gaussian splat</h1>
+    <p id="empty-text">Drop a <b>.ply</b> or <b>.spz</b> file here, or choose one from this device.</p>
+    <div class="row">
+      <button class="btn primary" id="btn-choose">Choose file</button>
+      <button class="btn" id="btn-anyway" hidden>Load anyway</button>
+    </div>
+    <p class="fine">Also reads .splat, .ksplat, .sog. Drop a metrics.json alongside to see training details.</p>
+  </section>
+
+  <!-- loading -->
+  <section id="loading" class="center-card glass compact" hidden>
+    <svg class="ring" viewBox="0 0 64 64" aria-hidden="true">
+      <circle class="track" cx="32" cy="32" r="27"/>
+      <circle id="ring-fill" class="fill" cx="32" cy="32" r="27"/>
+    </svg>
+    <div id="loading-pct" class="pct">0%</div>
+    <div id="loading-label" class="label">Downloading…</div>
+    <div id="loading-name" class="fine"></div>
+  </section>
+
+  <!-- bottom toolbar -->
+  <div id="toolbar" class="toolbar glass" hidden>
+    <button class="tool" id="tool-reset" title="Reset view (R)">
+      <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg><span>Reset</span>
+    </button>
+    <button class="tool" id="tool-frame" title="Frame object (F)">
+      <svg viewBox="0 0 24 24"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/><circle cx="12" cy="12" r="2.5"/></svg><span>Frame</span>
+    </button>
+    <button class="tool" id="tool-spin" title="Turntable (Space)" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="8" ry="3.2"/><path d="M12 4v7M9.5 6.5 12 4l2.5 2.5"/></svg><span>Spin</span>
+    </button>
+    <button class="tool" id="tool-walk" title="Walk in / dollhouse view (W)" aria-pressed="false" hidden>
+      <svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6 3 3v3M12 15l-1-5 4 1 2 3M11 10l-3 2v3"/></svg><span>Walk in</span>
+    </button>
+    <button class="tool" id="tool-flip" title="Flip upside down (U)">
+      <svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg><span>Flip</span>
+    </button>
+  </div>
+
+  <div id="hint" class="hint" hidden></div>
+
+  <!-- details panel -->
+  <aside id="panel" class="panel glass" hidden>
+    <div class="panel-head">
+      <h2>Details</h2>
+      <button class="icon-btn small" id="panel-close" aria-label="Close details">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div id="panel-body" class="panel-body"></div>
+  </aside>
+
+  <!-- settings -->
+  <aside id="settings" class="panel glass" hidden>
+    <div class="panel-head">
+      <h2>View</h2>
+      <button class="icon-btn small" id="settings-close" aria-label="Close settings">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label>Background</label>
+        <div class="seg" data-setting="background">
+          <button data-value="dark">Dark</button><button data-value="studio">Studio</button><button data-value="black">Black</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Quality</label>
+        <div class="seg" data-setting="quality">
+          <button data-value="auto">Auto</button><button data-value="high">Sharp</button><button data-value="battery">Battery</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Orientation</label>
+        <div class="seg" data-setting="orient">
+          <button data-value="0">Upright</button><button data-value="1">Flipped</button><button data-value="2">Tilt +90°</button><button data-value="3">Tilt −90°</button>
+        </div>
+      </div>
+      <div class="field toggle">
+        <label for="opt-ground">Ground ring</label>
+        <input type="checkbox" id="opt-ground" checked>
+      </div>
+      <div class="field">
+        <label for="opt-brightness">Brightness <span id="brightness-value" class="inline-value">100%</span>
+          <button class="link" id="brightness-reset" type="button">reset</button></label>
+        <input type="range" id="opt-brightness" min="0.6" max="1.6" step="0.02" value="1">
+      </div>
+      <div class="field toggle">
+        <label for="opt-sh">View-dependent colour (SH)</label>
+        <input type="checkbox" id="opt-sh" checked>
+      </div>
+    </div>
+  </aside>
+
+  <!-- help -->
+  <section id="help" class="center-card glass wide" hidden>
+    <div class="panel-head"><h2>Controls</h2>
+      <button class="icon-btn small" id="help-close" aria-label="Close controls"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="help-grid">
+      <div><h3>Mouse</h3>
+        <p><b>Drag</b> orbit</p><p><b>Right-drag</b> / <b>Shift-drag</b> pan</p><p><b>Wheel</b> zoom to cursor</p><p><b>Double-click</b> focus on a spot</p></div>
+      <div><h3>Touch</h3>
+        <p><b>One finger</b> orbit</p><p><b>Pinch</b> zoom</p><p><b>Two fingers</b> pan</p><p><b>Double-tap</b> focus on a spot</p></div>
+      <div><h3>Rooms (walk mode)</h3>
+        <p><b>Drag</b> look around</p><p><b>Pinch</b> / <b>wheel</b> / <b>W S</b> walk</p><p><b>Two fingers</b> / <b>A D</b> step sideways · <b>Q E</b> down/up</p><p><b>Double-tap</b> go there · <b>Dollhouse</b> see it all</p></div>
+      <div><h3>Keys</h3>
+        <p><b>R</b> reset · <b>F</b> frame</p><p><b>Space</b> turntable</p><p><b>←→↑↓</b> orbit · <b>+ −</b> zoom</p><p><b>U</b> flip · <b>I</b> details · <b>O</b> open</p></div>
+    </div>
+  </section>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="dropzone" class="dropzone" hidden><div>Drop to open</div></div>
+  <input type="file" id="file-input" accept=".ply,.spz,.splat,.ksplat,.sog,.zip,.json" multiple hidden>
+  <pre id="debug" class="debug" hidden></pre>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capture_manifest.schema.json",
+  "title": "Capture manifest v1",
+  "description": "One capture bundle = a folder holding manifest.json, the images it references, and an optional points3d.ply. Compatible with nerfstudio transforms.json. Poses are camera-to-world, OpenGL convention (x right, y up, camera looks down -z). Intrinsics are in pixels of the saved image. Per-frame intrinsics override the top-level defaults.",
+  "type": "object",
+  "required": ["schema_version", "frames"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.\\d+$" },
+    "capture_id": { "type": "string" },
+    "capture_mode": {
+      "description": "object = orbit around one object (uses object_bounds); scene = a whole room captured from several stations (extensions.scene). Absent = object.",
+      "enum": ["object", "scene"]
+    },
+    "source": { "enum": ["arkit", "arcore", "arkit+colmap", "arcore+colmap", "colmap", "synthetic", "other"] },
+    "device": { "type": "object" },
+    "camera_model": { "enum": ["PINHOLE", "OPENCV"] },
+    "fl_x": { "$ref": "#/$defs/positive" },
+    "fl_y": { "$ref": "#/$defs/positive" },
+    "cx": { "type": "number" },
+    "cy": { "type": "number" },
+    "w": { "type": "integer", "minimum": 1 },
+    "h": { "type": "integer", "minimum": 1 },
+    "k1": { "type": "number" },
+    "k2": { "type": "number" },
+    "p1": { "type": "number" },
+    "p2": { "type": "number" },
+    "points3d_path": { "type": "string" },
+    "object_bounds": {
+      "description": "Vertical cylinder enclosing the object: center = footprint center on the supporting surface (world +y is up), radius, height.",
+      "type": "object",
+      "required": ["center", "radius"],
+      "properties": {
+        "center": { "$ref": "#/$defs/vec3" },
+        "radius": { "$ref": "#/$defs/positive" },
+        "height": { "$ref": "#/$defs/positive" }
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["file_path", "transform_matrix"],
+        "properties": {
+          "file_path": { "type": "string", "minLength": 1 },
+          "transform_matrix": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } }
+          },
+          "fl_x": { "$ref": "#/$defs/positive" },
+          "fl_y": { "$ref": "#/$defs/positive" },
+          "cx": { "type": "number" },
+          "cy": { "type": "number" },
+          "w": { "type": "integer", "minimum": 1 },
+          "h": { "type": "integer", "minimum": 1 },
+          "timestamp": { "type": "number" },
+          "tracking_state": { "type": "string" },
+          "blur_score": { "type": "number" },
+          "angular_velocity": { "type": "number" },
+          "exposure_duration": { "type": "number" },
+          "iso": { "type": "number" },
+          "target_id": { "type": ["integer", "string"] },
+          "tracking_epoch": { "type": "integer", "minimum": 0, "description": "pose epoch: AR poses of different epochs may be offset (map jump after a shake)" },
+          "anchor_id": { "type": "integer", "description": "index of the spot (station) anchor the photo belongs to, -1 = none" },
+          "depth_path": { "type": "string" }
+        }
+      }
+    },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "positive": { "type": "number", "exclusiveMinimum": 0 },
+    "vec3": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+  }
+}

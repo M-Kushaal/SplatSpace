@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Pipeline / backend outputs + dev data
+out/
+data/
+storage/
+*.db
+
+# Unity (app/)
+app/[Ll]ibrary/
+app/[Tt]emp/
+app/[Ll]ogs/
+app/[Oo]bj/
+app/[Bb]uild/
+app/[Bb]uilds/
+app/[Uu]ser[Ss]ettings/
+app/*.csproj
+app/*.sln
+*.apk
+*.aab
+
+# Captures, splats and other large data (kept out of git)
+phone/
+*.zip
+*.ply
+*.spz
+node_modules/
+
+# Unity extras
+app/.utmp/
+app/*.csproj.user
+app/Assets/**/hs_err_pid*.log
+
+# Internal design notes (kept locally, not published)
+plans/
+main_level_plan.md

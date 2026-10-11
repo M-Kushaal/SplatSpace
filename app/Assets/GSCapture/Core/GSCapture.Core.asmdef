@@ -1,0 +1,6 @@
+{
+  "name": "GSCapture.Core",
+  "rootNamespace": "GSCapture.Core",
+  "references": [],
+  "autoReferenced": true
+}

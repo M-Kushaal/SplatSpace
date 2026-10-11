@@ -162,7 +162,7 @@ display(Image("/kaggle/working/cameras.png"))
 
 def phone_capture() -> dict:
     cells = [md("""
-# GPU test 02 — real phone capture
+# SplatSpace — process an object capture
 
 **Goal:** train a splat from a capture made by our Android app (poses from ARCore, no COLMAP).
 
@@ -231,7 +231,7 @@ def scene_capture() -> dict:
     nb = phone_capture()
     cells = nb["cells"]
     cells[0] = md("""
-# GPU test 03 — scene (room) capture
+# SplatSpace — process a room capture
 
 **Goal:** train a whole-room splat from a *Scene capture* made by our Android app (4–6 spots, phone at
 arm's length). Uses the `scene` training profile: 30k steps, images at 1600 px, up to 3M Gaussians,

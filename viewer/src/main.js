@@ -1,4 +1,4 @@
-// GS Viewer: modular Gaussian-splat viewer (Spark + three.js). Self-contained: open with ?url=<splat>
+// SplatSpace: modular Gaussian-splat viewer (Spark + three.js). Self-contained: open with ?url=<splat>
 // [&metrics=<metrics.json>&refine=<refine_report.json>&name=<title>&up=-y&mode=scene|object&debug], or drop /
 // pick a file. Scene (room) captures open in first-person walk mode; objects in orbit mode.
 import * as THREE from "three";
@@ -80,9 +80,9 @@ function setLoading(pct, label, name) {
 }
 
 function setTitle(name, sub) {
-  $("title").textContent = name || "GS Viewer";
+  $("title").textContent = name || "SplatSpace";
   $("subtitle").textContent = sub || "Gaussian splat viewer";
-  document.title = name ? `${name} · GS Viewer` : "GS Viewer";
+  document.title = name ? `${name} · SplatSpace` : "SplatSpace";
 }
 
 function showHint() {

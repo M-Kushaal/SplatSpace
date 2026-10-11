@@ -1,6 +1,6 @@
 <div align="center">
 
-# GS Capture
+# SplatSpace
 
 ### Turn any room or object into a 3D scene you can walk through, using just your phone.
 
@@ -12,7 +12,7 @@ Follow the on-screen guide, and get a photo-real 3D model that opens in any web 
 
 ## What it is
 
-GS Capture is an Android app that guides you while you photograph a room or an object. It then turns those
+SplatSpace is an Android app that guides you while you photograph a room or an object. It then turns those
 photos into a **Gaussian splat**: a realistic 3D scene you can walk around in, from any angle, on a phone or a
 computer.
 
@@ -44,7 +44,7 @@ installing it. Say yes.
 
 ### 2. Capture a room
 
-1. Open **GS Capture**, tap **New capture**, then **Scene capture**.
+1. Open **SplatSpace**, tap **New capture**, then **Scene capture**.
 2. **Point at the floor** until it says *Floor found*, then tap **Start scene**.
 3. **Turn on the spot.** Hold the phone out at arm's length and turn your whole body slowly, three times:
    phone **level**, tilted **down**, then tilted **up** at the ceiling. Each slice of the circle on screen

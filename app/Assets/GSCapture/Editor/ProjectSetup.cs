@@ -53,8 +53,10 @@ namespace GSCapture.EditorTools
 
         static void ConfigurePlayer()
         {
-            PlayerSettings.companyName = "GSCapture";
-            PlayerSettings.productName = "GS Capture";
+            PlayerSettings.companyName = "SplatSpace";
+            PlayerSettings.productName = "SplatSpace";
+            // Package id kept from before the SplatSpace rename: changing it would install a separate app and strand
+            // existing captures in the old one.
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.gscapture.app");
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel25; // Unity 6.3 minimum
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);

@@ -29,7 +29,7 @@ namespace GSCapture.UI
             content.offsetMin = content.offsetMax = Vector2.zero;
 
             // ---- left column: brand, hero action, tips, server
-            var title = UIKit.Label(content, "Title", "GS Capture", Theme.TitleSize, Theme.Text, Theme.Bold);
+            var title = UIKit.Label(content, "Title", "SplatSpace", Theme.TitleSize, Theme.Text, Theme.Bold);
             title.rectTransform.Place(new Vector2(0, 1), new Vector2(90, -80), new Vector2(760, 80));
             var sub = UIKit.Label(content, "Subtitle", "Scan an object or a whole room. Get a 3D Gaussian splat.",
                 Theme.BodySize, Theme.TextDim);

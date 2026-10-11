@@ -1,6 +1,6 @@
 def test_viewer_is_served_with_module_mime_types(client):
     r = client.get("/viewer/")
-    assert r.status_code == 200 and "GS Viewer" in r.text
+    assert r.status_code == 200 and "SplatSpace" in r.text
     js = client.get("/viewer/src/main.js")
     assert js.status_code == 200 and "javascript" in js.headers["content-type"]
     spark = client.get("/viewer/vendor/spark/spark.module.js")

@@ -1,4 +1,4 @@
-# GS Viewer — modular Gaussian splat viewer
+# SplatSpace viewer — modular Gaussian splat viewer
 
 A self-contained web viewer for 3D Gaussian splats (phone + desktop). No build step, no internet needed:
 everything it uses is vendored and pinned in `vendor/`.
